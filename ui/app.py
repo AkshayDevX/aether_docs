@@ -21,6 +21,149 @@ from agent.query import query_agent
 # Load environment keys
 load_dotenv(os.path.join(parent_dir, ".env"))
 
+import re
+
+def render_content_with_mermaid(text: str):
+    # Match code blocks starting with ```mermaid or ```graph... and ending with ```
+    pattern = re.compile(r"```(mermaid|graph.*?)\n(.*?)```", re.DOTALL | re.IGNORECASE)
+    
+    last_end = 0
+    for match in pattern.finditer(text):
+        start, end = match.span()
+        # Render preceding markdown text
+        prev_text = text[last_end:start].strip()
+        if prev_text:
+            st.markdown(prev_text)
+            
+        # Get diagram code
+        lang = match.group(1)
+        code = match.group(2).strip()
+        
+        # Prepend lang description if missing from the content itself (e.g. code is just raw connections)
+        if not code.startswith(("graph", "flowchart", "sequenceDiagram", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "gitGraph")):
+            if lang.startswith("graph") or lang.startswith("flowchart"):
+                code = f"{lang}\n{code}"
+                
+        # Render Mermaid using HTML, CDN JavaScript, and svg-pan-zoom in an iframe
+        mermaid_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+            <style>
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                    background-color: #0f172a;
+                    font-family: sans-serif;
+                }}
+                #container {{
+                    width: 100%;
+                    height: 100%;
+                    box-sizing: border-box;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 8px;
+                    background-color: #0f172a;
+                    position: relative;
+                }}
+                #container svg {{
+                    width: 100% !important;
+                    height: 100% !important;
+                    display: block;
+                }}
+                .svg-pan-zoom-control {{
+                    fill: #38bdf8 !important;
+                    fill-opacity: 0.8 !important;
+                }}
+                .svg-pan-zoom-control:hover {{
+                    fill-opacity: 1.0 !important;
+                }}
+                .svg-pan-zoom-control-background {{
+                    fill: #1e293b !important;
+                    fill-opacity: 0.5 !important;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="container">
+                <pre class="mermaid" style="margin: 0; text-align: center; color: white;">
+{code}
+                </pre>
+            </div>
+            <script type="module">
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                mermaid.initialize({{ 
+                    startOnLoad: true,
+                    theme: 'dark',
+                    securityLevel: 'loose',
+                    themeVariables: {{
+                        background: '#0f172a',
+                        primaryColor: '#1e293b',
+                        primaryTextColor: '#f8fafc',
+                        lineColor: '#38bdf8'
+                    }}
+                }});
+
+                // Periodically check if Mermaid has rendered and replaced the pre tag with an SVG
+                const interval = setInterval(() => {{
+                    const svg = document.querySelector('#container svg');
+                    if (svg) {{
+                        clearInterval(interval);
+                        
+                        // Style the SVG and parent wrappers to fill the container completely
+                        let el = svg;
+                        while (el && el.id !== 'container') {{
+                            el.style.width = '100%';
+                            el.style.height = '100%';
+                            el.style.maxWidth = '100%';
+                            el.style.maxHeight = '100%';
+                            el.style.margin = '0';
+                            el.style.padding = '0';
+                            el = el.parentElement;
+                        }}
+                        
+                        try {{
+                            // Initialize svg-pan-zoom for premium panning & zooming experience
+                            window.panZoom = svgPanZoom(svg, {{
+                                zoomEnabled: true,
+                                controlIconsEnabled: true,
+                                fit: true,
+                                center: true,
+                                minZoom: 0.2,
+                                maxZoom: 10,
+                                zoomScaleSensitivity: 0.2
+                            }});
+                            
+                            // Adjust zoom slightly on window resize to keep it centered
+                            window.addEventListener('resize', () => {{
+                                window.panZoom.resize();
+                                window.panZoom.fit();
+                                window.panZoom.center();
+                            }});
+                        }} catch (e) {{
+                            console.error("svgPanZoom initialization failed: ", e);
+                        }}
+                    }}
+                }}, 50);
+            </script>
+        </body>
+        </html>
+        """
+        # Render the diagram in a fixed-height container that feels comfortable
+        st.iframe(mermaid_html, height=450)
+        
+        last_end = end
+        
+    # Render remaining markdown text
+    remaining_text = text[last_end:].strip()
+    if remaining_text:
+        st.markdown(remaining_text)
+
+
 # 1. Premium CSS Injection
 CSS = """
 <style>
@@ -513,7 +656,10 @@ with tab_query:
     # Render chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            if msg["role"] == "assistant":
+                render_content_with_mermaid(msg["content"])
+            else:
+                st.markdown(msg["content"])
             if "graph_html" in msg and msg["graph_html"]:
                 st.iframe(msg["graph_html"], height=450)
                 
@@ -578,7 +724,7 @@ with tab_query:
                 log_placeholder.empty()
                 
                 # Display Answer
-                st.markdown(result["answer"])
+                render_content_with_mermaid(result["answer"])
                 
                 # Visualizing the Retrieved Sub-Graph Network in PyVis!
                 retrieved_nodes = result["retrieved_nodes"]
