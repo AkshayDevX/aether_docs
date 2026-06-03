@@ -13,7 +13,6 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from database import GraphDatabase, sanitize_node_id
-from embeddings import EmbeddingGenerator
 from agent.parser import HierarchicalMarkdownParser
 from agent.builder import builder_agent, db as builder_db
 from agent.query import query_agent
@@ -399,11 +398,11 @@ with tab_ingest:
     
     # Project Workspace Name Input for Ingestion
     st.markdown("### 🏷️ Target Project Workspace")
-    default_proj_name = "EventSpine" if active_proj == "All Projects" else active_proj
+    default_proj_name = "" if active_proj == "All Projects" else active_proj
     ingest_project = st.text_input(
         "Enter target project name to tag these documents:",
         value=default_proj_name,
-        placeholder="e.g. EventSpine, AetherDocs, BillingSystem"
+        placeholder="e.g. AetherDocs, BillingSystem"
     ).strip()
     
     if not ingest_project:

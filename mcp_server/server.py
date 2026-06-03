@@ -1,8 +1,6 @@
 import sys
 import os
 import json
-import re
-from typing import Dict, List, Optional
 
 # Ensure parent directory is in python path to load our local database and embedding modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
